@@ -8,6 +8,11 @@ namespace _mods.XMGDuelMod.Scripts._Core
 
         private void Awake()
         {
+            FindSingleton();
+        }
+
+        public static void FindSingleton()
+        {
             Instance = FindObjectOfType<T>();
             if (Instance == null)
             {

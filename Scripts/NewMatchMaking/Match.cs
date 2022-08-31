@@ -3,6 +3,7 @@ using _mods.XMGDuelMod.Scripts._Core;
 using _mods.XMGDuelMod.Scripts.ArenaReferences;
 using _mods.XMGDuelMod.Scripts.Console;
 using _mods.XMGDuelMod.Scripts.Enums;
+using _mods.XMGDuelMod.Scripts.Logger;
 using _mods.XMGDuelMod.Scripts.PlayerInfo;
 using HoldfastSharedMethods;
 using UnityEngine;
@@ -11,16 +12,17 @@ namespace _mods.XMGDuelMod.Scripts
 {
     public class Match
     {
-
-
-
-        private IArenaDefinition ArenaDefinition { get; }
+        
+        public ArenaDefinition ArenaDefinition { get; }
         private IConsole Console { get; }
-        private IMatchMakingService MatchMakingService { get; }
+        private IMatchMaking MatchMakingService { get; }
         private FactionCountry AttackingFaction { get; }
         private FactionCountry DefendingFaction { get; }
         private int RoundsNeededForWin { get; }
         private Settings Settings { get; }
+        private Ilogger Logger { get; }
+
+        public Dictionary<int, FactionCountry> GetPlayers => _playerIdToFaction;
 
 
         private Dictionary<int, bool> _playerIdToHasBeenKilledThisRound;
@@ -28,34 +30,40 @@ namespace _mods.XMGDuelMod.Scripts
         private Dictionary<int, FactionCountry> _playerIdToFaction;
         
         private Dictionary<FactionCountry, int> _factionToAlivePlayers;
-        private Dictionary<FactionCountry, List<PlayerMatchmakingInfo>> _factionToPlayerInfo;
+        private Dictionary<FactionCountry, int> _factionToTotalPlayers;
         private Dictionary<FactionCountry, int> _factionToRoundsLost;
         
 
-        public Match(IArenaDefinition arenaDefinition,
-            List<PlayerMatchmakingInfo> attackingPlayers, List<PlayerMatchmakingInfo> defendingPlayers,
-            int roundsNeededForWin, IMatchMakingService matchMakingService, IConsole console)
+        public Match(Ilogger logger, IMatchMaking matchMakingService, ArenaDefinition arenaDefinition,
+            List<int> attackingPlayers, List<int> defendingPlayers,
+            int roundsNeededForWin, Settings settings)
         {
-            MatchMakingService = matchMakingService;
-            Console = console;
-            Settings = Settings.Instance;
+            logger.LogDebug("We are creating a match");
 
-            AttackingFaction = MatchMakingService.AttackingFaction;
-            DefendingFaction = MatchMakingService.DefendingFaction;
+            Logger = logger;
+            MatchMakingService = matchMakingService;
+            Console = matchMakingService.Console;
+            Settings = settings;
+
+            AttackingFaction = MatchMakingService.RoundState.AttackingFaction;
+            DefendingFaction = MatchMakingService.RoundState.DefendingFaction;
             ArenaDefinition = arenaDefinition;
             RoundsNeededForWin = roundsNeededForWin;
 
             InitDictionaries();
-            _factionToPlayerInfo[AttackingFaction] = attackingPlayers;
-            _factionToPlayerInfo[DefendingFaction] = defendingPlayers;
-            
-            
+
             _factionToAlivePlayers[AttackingFaction] = attackingPlayers.Count;
             _factionToAlivePlayers[DefendingFaction] = defendingPlayers.Count;
+
+            _factionToTotalPlayers[AttackingFaction] = attackingPlayers.Count;
+            _factionToTotalPlayers[DefendingFaction] = defendingPlayers.Count;
+
             
             SetPlayerStates(attackingPlayers, AttackingFaction);
             SetPlayerStates(defendingPlayers, DefendingFaction);
             
+            TeleportPlayersToStartPositions(Settings.DuelStartMessage);
+
         }
         
         private void InitDictionaries()
@@ -63,9 +71,9 @@ namespace _mods.XMGDuelMod.Scripts
             _playerIdToInfo = new Dictionary<int, PlayerMatchmakingInfo>();
             _playerIdToFaction = new Dictionary<int, FactionCountry>();
             _playerIdToHasBeenKilledThisRound = new Dictionary<int, bool>();
-            
+
+            _factionToTotalPlayers = new Dictionary<FactionCountry, int>();
             _factionToAlivePlayers = new Dictionary<FactionCountry, int>();
-            _factionToPlayerInfo = new Dictionary<FactionCountry, List<PlayerMatchmakingInfo>>();
             _factionToRoundsLost = new Dictionary<FactionCountry, int>
             {
                 [AttackingFaction] = 0,
@@ -74,45 +82,37 @@ namespace _mods.XMGDuelMod.Scripts
         }
         
 
-        private void TeleportPlayersToStartPositions()
+        private void TeleportPlayersToStartPositions(string message)
         {
-            TeleportAttackers();
-            TeleportDefenders();
-        }
-
-        private void TeleportAttackers()
-        {
-            foreach (PlayerMatchmakingInfo playerInfo in _factionToPlayerInfo[AttackingFaction])
+            foreach (KeyValuePair<int,FactionCountry> keyValuePair in _playerIdToFaction)
             {
-                Vector3 nextLocation = ArenaDefinition.GetNextAttackerSpawn();
-                Console.TeleportPlayerToPosition(playerInfo.PlayerId, nextLocation);
-                Console.PrivateMessageDelayed(playerInfo.PlayerId, Settings.DuelStartMessage, Settings.DelayForMessage);
-                _playerIdToHasBeenKilledThisRound[playerInfo.PlayerId] = false;
-            }
-        }
-        private void TeleportDefenders()
-        {
-            foreach (PlayerMatchmakingInfo playerInfo in _factionToPlayerInfo[DefendingFaction])
-            {
-                Vector3 nextLocation = ArenaDefinition.GetNextDefenderSpawn();
-                Console.TeleportPlayerToPosition(playerInfo.PlayerId, nextLocation);
-                Console.PrivateMessageDelayed(playerInfo.PlayerId, Settings.DuelStartMessage, Settings.DelayForTeleport);
-                _playerIdToHasBeenKilledThisRound[playerInfo.PlayerId] = false;
+                Vector3 nextLocation = GetSpawnLocationForFaction(keyValuePair);
 
-            }
-        }
-
-
-        private void SetPlayerStates(List<PlayerMatchmakingInfo> playerList, FactionCountry factionCountry)
-        {
-            foreach (PlayerMatchmakingInfo playerMatchmakingInfo in playerList)
-            {
-                playerMatchmakingInfo.PlayerState = PlayerState.InMatch;
-                int playerId = playerMatchmakingInfo.PlayerId;
+                int playerId = keyValuePair.Key;
+                Console.TeleportPlayerToPositionDelayed(playerId, nextLocation,Settings.DelayForTeleport);
+                Console.PrivateMessageDelayed(playerId, message, Settings.DelayForMessage);
                 _playerIdToHasBeenKilledThisRound[playerId] = false;
-                _playerIdToInfo[playerId] = playerMatchmakingInfo;
-                _playerIdToFaction[playerId] = factionCountry;
+            }
+        }
 
+        private Vector3 GetSpawnLocationForFaction(KeyValuePair<int, FactionCountry> keyValuePair)
+        {
+            if (keyValuePair.Value == AttackingFaction)
+            {
+                return ArenaDefinition.GetNextAttackerSpawn();
+            }
+            return ArenaDefinition.GetNextDefenderSpawn();
+        }
+        
+        private void SetPlayerStates(List<int> playerList, FactionCountry factionCountry)
+        {
+            foreach (int playerId in playerList)
+            {
+                if (!MatchMakingService.PlayerStates.IdToMatchmakingInfo.TryGetValue(playerId, out PlayerMatchmakingInfo matchmakingInfo)){continue;}
+                matchmakingInfo.PlayerState = PlayerState.InMatch;
+                _playerIdToHasBeenKilledThisRound[playerId] = false;
+                _playerIdToInfo[playerId] = matchmakingInfo;
+                _playerIdToFaction[playerId] = factionCountry;
             }
         }
 
@@ -120,7 +120,7 @@ namespace _mods.XMGDuelMod.Scripts
 
         public bool HasPlayer(int playerIdToCheck)
         {
-            return _playerIdToInfo.ContainsKey(playerIdToCheck);
+            return _playerIdToFaction.ContainsKey(playerIdToCheck);
         }
 
         
@@ -128,13 +128,12 @@ namespace _mods.XMGDuelMod.Scripts
         
         public void PlayerKiledPlayer(int killerPlayerId, int victimPlayerID)
         {
-            if (_playerIdToHasBeenKilledThisRound[victimPlayerID]){return;} //most likely just killing the player in the mosh pit.
-
             RegisterKill(victimPlayerID);
         }
 
         private void RegisterKill(int victimPlayerID)
         {
+            if (_playerIdToHasBeenKilledThisRound[victimPlayerID]){return;} //most likely just killing the player in the mosh pit.
             FactionCountry faction = _playerIdToFaction[victimPlayerID];
             _playerIdToHasBeenKilledThisRound[victimPlayerID] = true;
             _factionToAlivePlayers[faction] -= 1;
@@ -180,15 +179,22 @@ namespace _mods.XMGDuelMod.Scripts
         private void StartNextRound()
         {
             HealPlayers();
+
+            _factionToAlivePlayers[AttackingFaction] = _factionToTotalPlayers[AttackingFaction];
+            _factionToAlivePlayers[DefendingFaction] = _factionToTotalPlayers[DefendingFaction];
             
-            TeleportPlayersToStartPositions();
+            int attackersWon = _factionToRoundsLost[DefendingFaction];
+            int defendersWon = _factionToRoundsLost[AttackingFaction];
+            
+            string startMessage = $"Round over. Score is {AttackingFaction} {attackersWon} - {defendersWon} {DefendingFaction}. First to {RoundsNeededForWin} wins";
+            TeleportPlayersToStartPositions(startMessage);
         }
 
         private void HealPlayers()
         {
-            foreach (KeyValuePair<int,PlayerMatchmakingInfo> playerMatchmakingInfo in _playerIdToInfo)
+            foreach (KeyValuePair<int,FactionCountry> keyValuePair in _playerIdToFaction)
             {
-                int playerId = playerMatchmakingInfo.Key;
+                int playerId = keyValuePair.Key;
                 if (MatchMakingService.PlayerStates.IdToSpawedData.TryGetValue(playerId,
                         out PlayerSpawnedInfo spawnedInfo))
                 {
@@ -212,7 +218,44 @@ namespace _mods.XMGDuelMod.Scripts
             {
                 nextLocation = ArenaDefinition.GetNextDefenderSpawn();
             }
-            Console.TeleportPlayerToPosition(playerId, nextLocation);
+            Console.TeleportPlayerToPositionDelayed(playerId, nextLocation, Settings.DelayForTeleportShort);
+        }
+
+        public void PlayerLeftServer(int playerId)
+        {
+            RegisterKill(playerId);
+            //We then need to remove the player from all info
+
+            _playerIdToHasBeenKilledThisRound.Remove(playerId);
+            _playerIdToInfo.Remove(playerId);
+
+            if (_playerIdToFaction.TryGetValue(playerId, out FactionCountry playersFaction))
+            {
+                DecreaseTotalPlayersForFaction(playersFaction);
+                _playerIdToFaction.Remove(playerId);
+            }
+        }
+
+        private void DecreaseTotalPlayersForFaction(FactionCountry playersFaction)
+        {
+            _factionToTotalPlayers[playersFaction] -= 1;
+            if (_factionToTotalPlayers[playersFaction] <= 0)
+            {
+                Logger.LogDebug($"Player left resulting in faction {playersFaction} having no players remaining. Ending the match");
+                EndMatch();
+            }
+        }
+
+        public void PlayerSwappedFaction(int playerId)
+        {
+            //We just handle it as if the player left the server.
+            if (_playerIdToInfo.TryGetValue(playerId, out PlayerMatchmakingInfo info))
+            {
+                info.PlayerState = PlayerState.Idle;
+            }
+            PlayerLeftServer(playerId);
+
+            
         }
     }
 }

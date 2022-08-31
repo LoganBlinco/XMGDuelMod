@@ -14,11 +14,7 @@ namespace _mods.XMGDuelMod.Scripts.PlayerInfo
         public PlayerState PlayerState { get; set; }
 
         public int PlayerId { get; }
-
-        public PlayerSpawnedInfo PlayerSpawnedInfo { get; private set; }
-        
         private Ilogger Logger { get; }
-        
         
         public PlayerMatchmakingInfo(MatchMakingPriority matchMakingPriority, Ilogger logger, int playerId)
         {
@@ -27,8 +23,6 @@ namespace _mods.XMGDuelMod.Scripts.PlayerInfo
             Logger = logger;
 
             PlayerId = playerId;
-
-            PlayerSpawnedInfo = null;
         }
 
         public void PlayerRespawned()

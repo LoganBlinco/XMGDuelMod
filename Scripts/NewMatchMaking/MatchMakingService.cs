@@ -1,55 +1,87 @@
 ﻿using System.Collections.Generic;
+using _mods.XMGDuelMod.Scripts.ArenaReferences;
+using _mods.XMGDuelMod.Scripts.Console;
 using _mods.XMGDuelMod.Scripts.PlayerInfo;
-using HoldfastSharedMethods;
-using UnityEditor;
 
 namespace _mods.XMGDuelMod.Scripts
 {
-    public class MatchMakingService : IMatchMakingService
+    public class MatchMakingService : IMatchMaking
     {
-        public FactionCountry AttackingFaction { get; }
-        public FactionCountry DefendingFaction { get; }
+
         public AllPlayersState PlayerStates { get; }
+        public RoundState RoundState { get; }
         
-        public IMatchMakingQueue MatchMakingQueue { get;}
+        public IConsole Console { get; }
+        private IMatchMakingQueue MatchMakingQueueHandler { get; }
+        private IMatchMakingAction MatchMakingActionActionHandler { get; }
         
-        private Dictionary<int, Match> _playerIdToMatch;
-        private Dictionary<Match, List<PlayerMatchmakingInfo>> _matchToPlayerInfo;
-
-
-
-        public void CreateMatch()
+        public MatchMakingService(IConsole console,IMatchMakingQueue matchMakingQueueHandler, IMatchMakingAction matchMakingActionActionHandler, AllPlayersState playerStates, RoundState roundState)
         {
-            throw new System.NotImplementedException();
+            PlayerStates = playerStates;
+            RoundState = roundState;
+            Console = console;
+            MatchMakingQueueHandler = matchMakingQueueHandler;
+            MatchMakingActionActionHandler = matchMakingActionActionHandler;
+        }
+        
+        public void CreateMatch(ArenaDefinition arenaToUse, List<int> attackingPlayers, List<int> defendingPlayers)
+        {
+            MatchMakingActionActionHandler.CreateMatch(this, arenaToUse, attackingPlayers, defendingPlayers);
         }
 
         public void EndMatch(Match matchEnded)
         {
-            if (!_matchToPlayerInfo.TryGetValue(matchEnded, out List<PlayerMatchmakingInfo> playersFromMatch)){return;}
-            foreach (PlayerMatchmakingInfo playerMatchmakingInfo in playersFromMatch)
-            {
-                MatchMakingQueue.RegisterPlayerForQueue(playerMatchmakingInfo);
-                _playerIdToMatch.Remove(playerMatchmakingInfo.PlayerId);
-            }
-            _matchToPlayerInfo.Remove(matchEnded);
+            MatchMakingActionActionHandler.EndMatch(this, matchEnded);
+            RegisterArenaForUse(matchEnded.ArenaDefinition);
+            MatchMakingQueueHandler.RegisterLostPlayersFromMatch(matchEnded);
+            
         }
 
         public void PlayerSpawned(int playerId)
         {
-            if (!_playerIdToMatch.TryGetValue(playerId, out Match match)){return;}
-
-            match.PlayerSpawned(playerId);
-
-            throw new System.NotImplementedException();
+            
+            MatchMakingActionActionHandler.PlayerSpawned(playerId);
         }
 
         public void PlayerKilledPlayer(int killerPlayerId, int victimPlayerID)
         {
-            if (!_playerIdToMatch.TryGetValue(killerPlayerId, out Match match)){return;}
+            MatchMakingActionActionHandler.PlayerKilledPlayer(killerPlayerId, victimPlayerID);
+        }
 
-            if (!match.HasPlayer(victimPlayerID)){return;}
+        public void PlayerLeft(int playerId)
+        {
+            MatchMakingActionActionHandler.PlayerLeft(playerId);
+        }
 
-            match.PlayerKiledPlayer(killerPlayerId, victimPlayerID);
+        public void RegisterPlayerForQueue(int playerId)
+        {
+            MatchMakingQueueHandler.RegisterPlayerForQueue(playerId);
+        }
+
+        public void RemovePlayerFromQueue(int playerId)
+        {
+            MatchMakingQueueHandler.RemovePlayerFromQueue(playerId);
+        }
+
+        public void PerformMatchMaking()
+        {
+            MatchMakingQueueHandler.PerformMatchMaking(this);
+        }
+
+        public void RegisterArenaForUse(ArenaDefinition arenaToAdd)
+        {
+            MatchMakingQueueHandler.RegisterArenaForUse(arenaToAdd);
+        }
+
+        public void UnregisterArenaAvailability(ArenaDefinition arenaToRemove)
+        {
+            MatchMakingQueueHandler.UnregisterArenaAvailability(arenaToRemove);
+        }
+
+        public void PlayerHasSwappedFaction(int playerId)
+        {
+            MatchMakingActionActionHandler.PlayerSwappedFaction(playerId);
+            MatchMakingQueueHandler.PlayerSwappedFaction(playerId);
         }
     }
 }

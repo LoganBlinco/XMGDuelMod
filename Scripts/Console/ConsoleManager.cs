@@ -8,9 +8,11 @@ namespace _mods.XMGDuelMod.Scripts.Console
     public class ConsoleManager : IConsole
     {
         private const string MESSAGE_PREFIX = "DUELBOT: ";
-        public InputField InputField { get; set; }
+        public static float CurrentTime = -1;
         
-        public bool IsValid => InputField == null;
+        public InputField InputField { get; set; }
+
+        public bool IsValid = false;
 
 
         private Ilogger Logger { get; }
@@ -35,7 +37,9 @@ namespace _mods.XMGDuelMod.Scripts.Console
                 //Find the one that's called "Game Console Panel"
                 if (String.Compare(can.name, "Game Console Panel", StringComparison.OrdinalIgnoreCase) == 0)
                 {
+                    IsValid = true;
                     //Inside this, now we need to find the input field where the player types messages.
+                    Logger.LogDebug("We found the console");
                     return can.GetComponentInChildren<InputField>(true);
                 }
             }
@@ -73,7 +77,12 @@ namespace _mods.XMGDuelMod.Scripts.Console
 
         public void PrivateMessageDelayed(int playerID, string message, int delay)
         {
-            throw new NotImplementedException();
+            Invoke($"delayed {(int)(CurrentTime - delay)} serverAdmin privateMessage {playerID} {message}");
+        }
+        
+        public void TeleportPlayerToPositionDelayed(int playerId, Vector3 location, int delay)
+        {
+            Invoke($"delayed {(int)(CurrentTime - delay)} teleport {playerId} {location.x},{location.y},{location.z}");
         }
 
         public void Slap(int playerID, int damage)
@@ -89,6 +98,7 @@ namespace _mods.XMGDuelMod.Scripts.Console
         public void HealPlayer(int playerId, byte currentHp)
         {
             if (currentHp <= 0 ){return;}
+            if (currentHp >= 100){return;}
 
             byte amountToHeal = (byte) (100 - currentHp);
             Invoke($"serverAdmin slap {playerId} {-amountToHeal}");

@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
 using _mods.XMGDuelMod.Scripts._Core;
+using _mods.XMGDuelMod.Scripts.Logger;
 using HoldfastSharedMethods;
-using ImpactRating;
 using UnityEngine;
 
 namespace _mods.XMGDuelMod.Scripts.PlayerInfo
@@ -38,16 +38,25 @@ namespace _mods.XMGDuelMod.Scripts.PlayerInfo
         /// <summary>
         /// Updates (or creates) PlayerSpawnedInfo for the player.
         /// </summary>
-        public void UpdatePlayerSpawnedData(int playerId, FactionCountry playerFaction, PlayerClass playerClass, GameObject playerObject)
+        public void UpdatePlayerSpawnedData(Ilogger logger, int playerId, FactionCountry playerFaction, PlayerClass playerClass, GameObject playerObject)
         {
             PlayerSpawnedInfo spawnedInfo = new PlayerSpawnedInfo(playerFaction, playerClass, playerObject);
             IdToSpawedData[playerId] = spawnedInfo;
+            logger.LogDebug($"Adding {playerId} to the dictionary. Size is now {IdToSpawedData.Count}");
+            
         }
 
         public void UpdateClientData(int playerId, ulong steamId, string playerName, string regimentTag, bool isBot)
         {
             ClientData clientData = new ClientData(playerId, steamId, playerName, regimentTag, isBot);
             IdToClientData[playerId] = clientData;
+        }
+
+        public void CreatePlayerMatchmakingInfo(int playerId, Ilogger logger)
+        {
+            IdToMatchmakingInfo[playerId] = Factory.CreateMatchMakingInfo(logger, playerId);
+            
+            logger.LogDebug($"Crated matchmaking info for player {playerId}. Size is {IdToMatchmakingInfo.Count}");
         }
 
         public void UpdatePlayerHealth(int playerId, byte newHp)

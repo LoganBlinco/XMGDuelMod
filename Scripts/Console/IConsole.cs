@@ -7,9 +7,7 @@ namespace _mods.XMGDuelMod.Scripts.Console
     {
         
         public InputField InputField { get; set; }
-
-        public bool IsValid { get; }
-
+        
 
         public void Invoke(string command);
 
@@ -23,6 +21,8 @@ namespace _mods.XMGDuelMod.Scripts.Console
         public void Slap(int playerID, int damage);
         
         public void TeleportPlayerToPosition(int playerId, Vector3 location);
+
+        public void TeleportPlayerToPositionDelayed(int playerId, Vector3 location, int delay);
 
         public void HealPlayer(int playerId, byte currentHp);
 
